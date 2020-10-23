@@ -59,4 +59,14 @@ docker run -p 7201:7201 -p 7203:7203 --name m3db -v $(pwd)/m3db_data:/var/lib/m3
 When running the command above on Docker for Mac, Docker for Windows, and some Linux distributions you may see errors about settings not being at recommended values. Unless you intend to run M3DB in production on macOS or Windows, you can ignore these warnings.
 {{% /notice %}}
 
+## Configuration
+
+This example uses this [sample configuration file](https://github.com/m3db/m3/raw/master/src/dbnode/config/m3dbnode-local-etcd.yml) by default.
+
+The file groups configuration into `coordinator` or `db` sections that represent the `M3Coordinator` and `M3DB` instances of single-node cluster.
+
+{{% notice tip %}}
+You can find more information on configuring M3DB in the [operational guides section](/operational_guide/).
+{{% /notice %}}
+
 {{% fileinclude file="quickstart/common-steps.md" %}}
