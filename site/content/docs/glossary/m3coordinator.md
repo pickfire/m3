@@ -3,9 +3,7 @@ title: M3Coordinator
 id: m3coordinator
 date: 2019-06-15
 full_link: 
-short_description: >
-   I am a test term.
-
+short_description: The M3 coordination service
 aka: 
 tags:
 - example
