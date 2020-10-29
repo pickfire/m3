@@ -1,10 +1,15 @@
 ---
-title: M3DB Cluster Deployment, Manually (The Hard Way)
-menuTitle: Manual Cluster Deployment
+linktitle: "Creating a Manual Cluster"
 weight: 2
 ---
 
+# Creating an M3 Cluster with Binaries
+
 This guide shows you the steps involved in creating an M3 cluster using M3 binaries, typically you would automate this with infrastructure as code tools such as Terraform or Kubernetes.
+
+{{% notice note %}}
+This guide assumes you have read the [quickstart](/docs/quickstart), and builds upon the concepts in that guide.
+{{% /notice %}}
 
 ## M3 Architecture
 
@@ -14,12 +19,15 @@ Here's a typical M3 deployment:
 
 ![Typical Deployment](/cluster_architecture.png)
 
-An M3 deployment has two main node types:
-
-<!-- TODO: These are mentioned but we don't do anything with them -->
+An M3 deployment typically has two main node types:
 
 -   **{{< glossary_tooltip text="Coordinator node" term_id="m3coordinator" >}}**: `m3coordinator` nodes coordinate reads and writes across all nodes in the cluster. It's a lightweight process, and does not store any data. This role typically runs alongside a Prometheus instance, or is part of a collector agent.
 -   **{{< glossary_tooltip text="Storage node" term_id="m3dbnode" >}}**: The `m3dbnode` processes are the workhorses of M3, they store data and serve reads and writes.
+
+And exposes two ports:
+
+-   `7201` to manage the cluster topology, you make most API calls to this endpoint
+-   `7203` for Prometheus to scrape the metrics produced by M3DB and M3Coordinator
 
 ## Prerequisites
 
@@ -34,14 +42,19 @@ M3 storage nodes have an embedded etcd server you can use for small test cluster
 {{% /notice %}}
 
 ## Download and Install a Binary
+
 You can download the latest release as [pre-compiled binaries from the M3 GitHub page](https://github.com/m3db/m3/releases/latest). Inside the expanded archive are binaries for `m3dbnode`, which combines a coordinator and storage node, and a binary for `m3coordinator`, which is a standalone coordinator node.
 
 ## Build from Source
+
 ### Prerequisites
-- [Go 1.10 or higher](https://golang.org/dl/)
-- [Make](https://www.gnu.org/software/make/)
+
+-   [Go 1.10 or higher](https://golang.org/dl/)
+-   [Make](https://www.gnu.org/software/make/)
+
 ### Build
-[Clone the codebase](https://github.com/m3db/m3) and build from source using `make m3dbnode`.
+
+[Clone the codebase](https://github.com/m3db/m3) and run `make m3dbnode` to generate a binary for a combination coordinator and storage node, or `make m3coordinator` to generate a binary for a standalone coordinator node.
 
 ## Provision a Host
 
@@ -55,15 +68,17 @@ M3 in production can run on local or cloud-based VMs, or bare-metal servers. M3 
 If you use AWS or GCP, we recommend you use static IPs so that if you need to replace a host, you don't have to update configuration files on all the hosts, but decommission the old seed node and provision a new seed node with the same host ID and static IP that the old seed node had. If you're using AWS you can use an [Elastic Network Interface](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html) on a Virtual Private Cloud (VPC) and for GCP you can use an [internal static IP address](https://cloud.google.com/compute/docs/ip-addresses/reserve-static-internal-ip-address).
 {{% /notice %}}
 
-This example creates three static IP addresses for three **storage nodes**.
+This example creates three static IP addresses for three storage nodes, using the embedded coordinator.
 
 This guide assumes you have host names configured, i.e., running `hostname` on a host in the cluster returns the host ID you use when creating the cluster placement.
 
-<!-- TODO: Check this and also streamline, still quite horrible to parse -->
-
+{{% notice tip %}}
 When using GCP the name of your instance is the host name. When you create an instance, click _Management, disks, networking, SSH keys_, under _Networking_, click the default interface, click the _Primary internal IP_ drop down, select _Reserve a static internal IP address_, give it an appropriate name and description, and use _Assign automatically_.
+{{% /notice %}}
 
+{{% notice tip %}}
 When using AWS, you can use the host name supplied for the provisioned VM as your host ID, or use the `environment` host ID resolver and pass the host ID when launching the database process with an environment variable.
+{{% /notice %}}
 
 For example, if you used `M3DC_HOST_ID` for the environment variable name, use the following in your configuration:
 
@@ -75,9 +90,28 @@ hostID:
 
 Then start the `m3dbnode` process with:
 
+{{< tabs name="start_container" >}}
+{{% tab name="Pre-built binary" %}}
+
 ```shell
 M3DB_HOST_ID=m3db001 m3dbnode -f <config-file.yml>
 ```
+
+{{% notice info %}}
+Depending on your operating system setup, you might need to prefix the command with `sudo`.
+{{% /notice %}}
+
+{{% /tab %}}
+{{% tab name="Output" %}}
+
+<!-- TODO: Perfect image, pref with terminalizer -->
+
+<!-- TODO: Update image -->
+
+![Docker pull and run](/docker-install.gif)
+
+{{% /tab %}}
+{{< /tabs >}}
 
 ### Kernel Configuration
 
@@ -87,8 +121,14 @@ Depending on the default limits of your bare-metal machine or VM, M3 may need so
 
 You configure each M3 component by passing the location of a YAML file with the `-f` argument.
 
+The file groups configuration into `coordinator` or `db` sections that represent the `M3Coordinator` and `M3DB` instances of single-node cluster.
+
+{{% notice tip %}}
+You can find more information on configuring M3DB in the [operational guides section](/operational_guide/).
+{{% /notice %}}
+
 {{% notice note %}}
-The steps in this guide have the following 3 seed nodes, you need to change your configuration to suit the details of yours, including the details of an etcd cluster in the `etcdClusters` section.
+The steps in this guide have the following 3 seed nodes, you need to change your configuration to suit the details of yours, including the details of an etcd cluster in the `etcdClusters` section of the M3 configuration file.
 {{% /notice %}}
 
 -   m3db001 (Region=us-east1, Zone=us-east1-a, Static IP=10.142.0.1)
@@ -133,22 +173,28 @@ You can daemon-ize the node startup process using your favorite utility such as 
 
 ## Create Namespace and Initialize Placement
 
-<!-- TODO: Again partials and includes across guides? -->
+<!-- TODO: Again partialise and include across guides when complete -->
+
 <!-- TODO: Probably take this example up a notch for the how to guides -->
+
 This guide uses the _{{% apiendpoint %}}database/create_ endpoint that creates a namespace, and the placement if it doesn't already exist based on the `type` argument.
 
-The `namespaceName` argument must match the namespace in the `local` section of the `M3Coordinator` YAML configuration. If you [add any namespaces](/operational_guide/namespace_configuration.md) you also need to add them to the `local` section of `M3Coordinator`'s YAML configuration.
+You can create [placements](/docs/operational_guide/placement_configuration/) and [namespaces](/docs/operational_guide/namespace_configuration/#advanced-hard-way) separately if you need more control over their settings.
 
-You can create [placements](https://docs.m3db.io/operational_guide/placement_configuration/) and [namespaces](https://docs.m3db.io/operational_guide/namespace_configuration/#advanced-hard-way) separately if you need more control over their settings.
+The `namespaceName` argument must match the namespace in the `local` section of the `M3Coordinator` YAML configuration. If you [add any namespaces](/docs/operational_guide/namespace_configuration) you also need to add them to the `local` section of `M3Coordinator`'s YAML configuration.
+
+In the example below, the configuration for each host matches the details outlined above for the three nodes used. `isolationGroup` specifies how the cluster places shards to avoid more than one replica of a shard appearing in the same replica group. You should use at least as many isolation groups as your replication factor. This example uses the availability zones `us-east1-a`, `us-east1-b`, `us-east1-c` as the isolation groups which matches our replication factor of 3. [Read more details in this guide](/docs/operational_guide/replication_and_deployment_in_zones).
 
 {{< tabs name="database_create" >}}
 {{% tab name="Command" %}}
+
+<!-- TODO: create partial -->
 
 ```shell
 curl -X POST {{% apiendpoint %}}database/create -d '{
   "type": "cluster",
   "namespaceName": "default",
-  "retentionTime": "168h",
+  "retentionTime": "48h",
   "numShards": "1024",
   "replicationFactor": "3",
   "hosts": [
@@ -180,10 +226,6 @@ curl -X POST {{% apiendpoint %}}database/create -d '{
 }'
 ```
 
-{{% notice note %}}
-`isolationGroup` specifies how the cluster places shards to avoid more than one replica of a shard appearing in the same replica group. You should use at least as many isolation groups as your replication factor. This example uses the availability zones `us-east1-a`, `us-east1-b`, `us-east1-c` as the isolation groups which matches our replication factor of 3. [Read more details in this guide](/operational_guide/replication_and_deployment_in_zones).
-{{% /notice %}}
-
 {{% /tab %}}
 {{% tab name="Output" %}}
 
@@ -213,85 +255,11 @@ We recommend a replication factor of **3**, with each replica spread across fail
 
 Read the [placement configuration guide](/operational_guide/placement_configuration) to determine the appropriate number of shards to specify.
 
-## Test it out
+{{% fileinclude file="getting-started/common-steps.md" %}}
 
-<!-- TODO: Again partials and includes across guides? -->
+<!-- ## Next Steps
 
-Now you can write tagged metrics:
+This quickstart covered getting a single-node M3DB cluster running, and writing and querying metrics to the cluster. Some next steps are:
 
-```shell
-curl -X POST {{% apiendpoint %}}json/write -d '{
-  "tags": 
-    {
-      "__name__": "third_avenue",
-      "city": "new_york",
-      "checkout": "1"
-    },
-    "timestamp": '\"$(date "+%s")\"',
-    "value": 3347.26
-}'
-```
-
-And read the metrics written, for example, to return results in the past 45 seconds.
-
-{{< tabs name="example_promql_regex" >}}
-{{% tab name="Linux" %}}
-
-<!-- TODO: Check this on Linux -->
-
-```shell
-curl -X "POST" -G "{{% apiendpoint %}}query_range" \
-  -d "query=third_avenue" \
-  -d "start=$(date "+%s" -d "45 seconds ago")" \
-  -d "end=$( date +%s )" \
-  -d "step=5s" | jq .  
-```
-
-{{% /tab %}}
-{{% tab name="macOS/BSD" %}}
-
-```shell
-curl -X "POST" -G "{{% apiendpoint %}}query_range" \
-  -d "query=third_avenue" \
-  -d "start=$( date -v -45S +%s )" \
-  -d "end=$( date +%s )" \
-  -d "step=5s" | jq .
-```
-
-{{% /tab %}}
-{{% tab name="Output" %}}
-
-```json
-{
-  "status": "success",
-  "data": {
-    "resultType": "matrix",
-    "result": [
-      {
-        "metric": {
-          "__name__": "third_avenue",
-          "checkout": "1",
-          "city": "new_york"
-        },
-        "values": [
-          [
-            {{% now %}},
-            "3347.26"
-          ],
-          [
-            {{% now %}},
-            "5347.26"
-          ],
-          [
-            {{% now %}},
-            "7347.26"
-          ]
-        ]
-      }
-    ]
-  }
-}
-```
-
-{{% /tab %}}
-{{< /tabs >}}
+-   one
+-   two -->
