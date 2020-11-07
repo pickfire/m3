@@ -595,6 +595,10 @@ func Run(runOpts RunOptions) {
 	}
 	opts = opts.SetPersistManager(pm)
 
+	// Set the index claims manager
+	icm := fs.NewIndexClaimsManager(fsopts)
+	opts = opts.SetIndexClaimsManager(icm)
+
 	var (
 		envCfg environment.ConfigureResults
 	)
